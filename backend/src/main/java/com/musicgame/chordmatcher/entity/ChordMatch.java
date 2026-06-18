@@ -20,6 +20,8 @@ public class ChordMatch {
     @Column(name = "key_type")
     private String keyType;
 
+    private String style;
+
     @Column(name = "num_measures")
     private int numMeasures;
 

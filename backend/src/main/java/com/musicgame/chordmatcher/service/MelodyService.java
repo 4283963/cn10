@@ -43,9 +43,10 @@ public class MelodyService {
 
     @Transactional
     public ChordMatchResponse createMelodyAndMatchChords(MelodyRequest request) {
+        String style = request.getStyle() != null ? request.getStyle() : "folk";
         Melody melody = saveMelody(request);
-        ChordMatch chordMatch = matchAndSaveChords(melody, request.getNotes());
-        return buildResponse(melody, chordMatch, request.getNotes());
+        PythonChordMatcherService.ChordMatchResult matchResult = matchAndSaveChords(melody, request.getNotes(), style);
+        return buildResponse(melody, matchResult, request.getNotes());
     }
 
     @Transactional
@@ -75,10 +76,10 @@ public class MelodyService {
     }
 
     @Transactional
-    public ChordMatch matchAndSaveChords(Melody melody, List<NoteDto> notes) {
+    public PythonChordMatcherService.ChordMatchResult matchAndSaveChords(Melody melody, List<NoteDto> notes, String style) {
         try {
             PythonChordMatcherService.ChordMatchResult matchResult =
-                    chordMatcherService.matchChords(notes);
+                    chordMatcherService.matchChords(notes, style);
 
             ChordMatch chordMatch = new ChordMatch();
             chordMatch.setChordsJson(objectMapper.writeValueAsString(matchResult.getChords()));
@@ -86,13 +87,14 @@ public class MelodyService {
             chordMatch.setKeyType(matchResult.getKeyType());
             chordMatch.setNumMeasures(matchResult.getNumMeasures());
             chordMatch.setConfidence(matchResult.getConfidence());
+            chordMatch.setStyle(matchResult.getStyle());
             chordMatch.setMelody(melody);
 
-            ChordMatch saved = chordMatchRepository.save(chordMatch);
-            logger.info("Saved chord match for melody {}: {} chords, key: {} {}",
+            chordMatchRepository.save(chordMatch);
+            logger.info("Saved chord match for melody {}: {} chords, key: {} {}, style: {}",
                     melody.getId(), matchResult.getChords().size(),
-                    matchResult.getKey(), matchResult.getKeyType());
-            return saved;
+                    matchResult.getKey(), matchResult.getKeyType(), matchResult.getStyle());
+            return matchResult;
 
         } catch (TimeoutException e) {
             logger.warn("Chord matching timed out for melody {}: {}", melody.getId(), e.getMessage());
@@ -132,6 +134,7 @@ public class MelodyService {
             response.setKeyType(chordMatch.getKeyType());
             response.setNumMeasures(chordMatch.getNumMeasures());
             response.setConfidence(chordMatch.getConfidence());
+            response.setStyle(chordMatch.getStyle());
         }
 
         return Optional.of(response);
@@ -147,15 +150,19 @@ public class MelodyService {
         return melodyRepository.findTop10ByOrderByCreatedAtDesc();
     }
 
-    private ChordMatchResponse buildResponse(Melody melody, ChordMatch chordMatch, List<NoteDto> originalNotes) {
+    private ChordMatchResponse buildResponse(Melody melody, PythonChordMatcherService.ChordMatchResult matchResult, List<NoteDto> originalNotes) {
         ChordMatchResponse response = new ChordMatchResponse();
         response.setMelodyId(melody.getId());
         response.setOriginalNotes(originalNotes);
-        response.setChords(parseChordsJson(chordMatch.getChordsJson()));
-        response.setKey(chordMatch.getKey());
-        response.setKeyType(chordMatch.getKeyType());
-        response.setNumMeasures(chordMatch.getNumMeasures());
-        response.setConfidence(chordMatch.getConfidence());
+        response.setChords(matchResult.getChords());
+        response.setKey(matchResult.getKey());
+        response.setKeyType(matchResult.getKeyType());
+        response.setNumMeasures(matchResult.getNumMeasures());
+        response.setConfidence(matchResult.getConfidence());
+        response.setStyle(matchResult.getStyle());
+        response.setStyleInfo(matchResult.getStyleInfo());
+        response.setRhythmPattern(matchResult.getRhythmPattern());
+        response.setAccompaniment(matchResult.getAccompaniment());
         return response;
     }
 

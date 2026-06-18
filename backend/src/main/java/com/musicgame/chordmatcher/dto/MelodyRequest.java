@@ -15,6 +15,16 @@ public class MelodyRequest {
 
     private String userId;
 
+    private String style;
+
+    public String getStyle() {
+        return style;
+    }
+
+    public void setStyle(String style) {
+        this.style = style;
+    }
+
     public List<NoteDto> getNotes() {
         return notes;
     }

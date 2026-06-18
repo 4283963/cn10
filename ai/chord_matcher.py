@@ -46,6 +46,94 @@ CHORD_PROGRESSION_SCORES = {
     ('Em', 'Am'): 0.9, ('Em', 'C'): 0.7,
 }
 
+STYLE_CONFIGS = {
+    'folk': {
+        'name': '民谣风格',
+        'chord_complexity': 'simple',
+        'prefer_open_chords': True,
+        'rhythm_type': 'strumming',
+        'tempo_modifier': 0.85,
+        'chord_bonus': ['maj', 'min'],
+        'description': '温暖的木吉他扫弦，简单优美的三和弦进行'
+    },
+    'rock': {
+        'name': '摇滚风格',
+        'chord_complexity': 'power',
+        'prefer_open_chords': False,
+        'rhythm_type': 'power_chord',
+        'tempo_modifier': 1.2,
+        'chord_bonus': ['maj', 'power', 'dom7'],
+        'description': '充满力量的五和弦与强力扫弦，节奏感强烈'
+    },
+    'classical': {
+        'name': '古典风格',
+        'chord_complexity': 'rich',
+        'prefer_open_chords': False,
+        'rhythm_type': 'arpeggio',
+        'tempo_modifier': 0.9,
+        'chord_bonus': ['maj7', 'min7', 'dim', 'maj', 'min'],
+        'description': '精致的琶音分解和弦，丰富的七和弦与色彩和弦'
+    }
+}
+
+RHYTHM_PATTERNS = {
+    'folk': {
+        'strumming': {
+            'pattern_name': '下上下上 民谣扫弦',
+            'strokes_per_measure': 8,
+            'strokes': [
+                {'time': 0.0, 'direction': 'down', 'emphasis': 1.0},
+                {'time': 0.5, 'direction': 'up', 'emphasis': 0.6},
+                {'time': 1.0, 'direction': 'down', 'emphasis': 0.8},
+                {'time': 1.5, 'direction': 'up', 'emphasis': 0.5},
+                {'time': 2.0, 'direction': 'down', 'emphasis': 1.0},
+                {'time': 2.5, 'direction': 'up', 'emphasis': 0.6},
+                {'time': 3.0, 'direction': 'down', 'emphasis': 0.8},
+                {'time': 3.5, 'direction': 'up', 'emphasis': 0.7},
+            ],
+            'bass_note_beat': [0, 2]
+        }
+    },
+    'rock': {
+        'power_chord': {
+            'pattern_name': '八分音符 强力和弦',
+            'strokes_per_measure': 8,
+            'strokes': [
+                {'time': 0.0, 'direction': 'down', 'emphasis': 1.0},
+                {'time': 0.5, 'direction': 'down', 'emphasis': 0.7},
+                {'time': 1.0, 'direction': 'down', 'emphasis': 0.9},
+                {'time': 1.5, 'direction': 'down', 'emphasis': 0.6},
+                {'time': 2.0, 'direction': 'down', 'emphasis': 1.0},
+                {'time': 2.5, 'direction': 'down', 'emphasis': 0.7},
+                {'time': 3.0, 'direction': 'down', 'emphasis': 0.9},
+                {'time': 3.5, 'direction': 'down', 'emphasis': 0.8},
+            ],
+            'bass_note_beat': [0, 1, 2, 3]
+        }
+    },
+    'classical': {
+        'arpeggio': {
+            'pattern_name': '琶音分解 古典风格',
+            'strokes_per_measure': 12,
+            'strokes': [
+                {'time': 0.0, 'string': 'bass', 'emphasis': 1.0},
+                {'time': 0.333, 'string': 'high', 'emphasis': 0.7},
+                {'time': 0.666, 'string': 'mid', 'emphasis': 0.6},
+                {'time': 1.0, 'string': 'low', 'emphasis': 0.8},
+                {'time': 1.333, 'string': 'mid', 'emphasis': 0.7},
+                {'time': 1.666, 'string': 'high', 'emphasis': 0.6},
+                {'time': 2.0, 'string': 'bass', 'emphasis': 1.0},
+                {'time': 2.333, 'string': 'high', 'emphasis': 0.7},
+                {'time': 2.666, 'string': 'mid', 'emphasis': 0.6},
+                {'time': 3.0, 'string': 'low', 'emphasis': 0.8},
+                {'time': 3.333, 'string': 'mid', 'emphasis': 0.7},
+                {'time': 3.666, 'string': 'high', 'emphasis': 0.6},
+            ],
+            'bass_note_beat': [0, 2]
+        }
+    }
+}
+
 
 def _signal_handler(signum, frame):
     sys.exit(128 + signum)
@@ -98,10 +186,26 @@ def get_chord_notes(chord_name):
     return [(root_idx + interval) % 12 for interval in intervals]
 
 
-def parse_notes(notes_json):
-    notes = json.loads(notes_json)
+def parse_input(input_data):
+    try:
+        data = json.loads(input_data)
+        if isinstance(data, dict):
+            notes = data.get('notes', [])
+            style = data.get('style', 'folk')
+            return notes, style
+        else:
+            return data, 'folk'
+    except json.JSONDecodeError:
+        try:
+            notes = json.loads(input_data)
+            return notes, 'folk'
+        except Exception:
+            return [], 'folk'
+
+
+def parse_notes(notes_list):
     parsed = []
-    for note in notes:
+    for note in notes_list:
         pitch = note.get('pitch', note.get('note', ''))
         duration = note.get('duration', note.get('beat', 1.0))
         parsed.append({
@@ -166,9 +270,30 @@ def chord_progression_score(prev_chord, curr_chord):
     return CHORD_PROGRESSION_SCORES.get((prev_chord, curr_chord), 0.3)
 
 
-def generate_candidate_chords():
+def generate_candidate_chords(style='folk'):
     candidates = []
-    for note in ['C', 'D', 'E', 'F', 'G', 'A', 'B']:
+    base_notes = ['C', 'D', 'E', 'F', 'G', 'A', 'B']
+
+    if style == 'rock':
+        for note in base_notes:
+            candidates.append(note)
+            candidates.append(note + 'm')
+        return candidates
+
+    if style == 'classical':
+        for note in base_notes:
+            candidates.append(note)
+            candidates.append(note + 'm')
+            candidates.append(note + '7')
+            candidates.append(note + 'maj7')
+            candidates.append(note + 'm7')
+            candidates.append(note + 'dim')
+        for note in ['C#', 'F#']:
+            candidates.append(note)
+            candidates.append(note + 'm')
+        return candidates
+
+    for note in base_notes:
         candidates.append(note)
         candidates.append(note + 'm')
     for note in ['C#', 'F#']:
@@ -242,11 +367,114 @@ def get_diatonic_chords(key_note, key_type):
     return chords
 
 
-def match_chords(notes_json, model_path=None):
-    notes = parse_notes(notes_json)
+def style_chord_bonus(chord, style):
+    if style == 'folk':
+        if chord in ['C', 'G', 'D', 'Em', 'Am', 'F']:
+            return 0.12
+        if chord.endswith('7') or 'dim' in chord or 'aug' in chord:
+            return -0.1
+        return 0.0
+
+    if style == 'rock':
+        if chord in ['C', 'G', 'D', 'A', 'E']:
+            return 0.1
+        if chord.endswith('m'):
+            return 0.05
+        if '7' in chord:
+            return 0.08
+        return 0.0
+
+    if style == 'classical':
+        if 'maj7' in chord or 'm7' in chord:
+            return 0.15
+        if 'dim' in chord:
+            return 0.05
+        if '7' in chord:
+            return 0.08
+        return 0.0
+
+    return 0.0
+
+
+def generate_accompaniment_track(chords, style, beats_per_measure=4.0):
+    style_config = STYLE_CONFIGS.get(style, STYLE_CONFIGS['folk'])
+    rhythm_type = style_config['rhythm_type']
+    pattern = RHYTHM_PATTERNS.get(style, {}).get(rhythm_type, {})
+
+    accompaniment = []
+    for measure_idx, chord in enumerate(chords):
+        measure_start = measure_idx * beats_per_measure
+        chord_notes = get_chord_notes(chord)
+
+        if not chord_notes:
+            continue
+
+        if style == 'classical':
+            for stroke in pattern.get('strokes', []):
+                note_idx = 0
+                string = stroke.get('string', 'mid')
+                if string == 'bass':
+                    note_idx = 0
+                elif string == 'low':
+                    note_idx = 0
+                elif string == 'mid':
+                    note_idx = 1 % len(chord_notes)
+                elif string == 'high':
+                    note_idx = (len(chord_notes) - 1) % len(chord_notes)
+
+                pc = chord_notes[note_idx % len(chord_notes)]
+                accompaniment.append({
+                    'measure': measure_idx,
+                    'time': measure_start + stroke['time'],
+                    'pitch_class': pc,
+                    'pitch': NOTE_NAMES[pc],
+                    'velocity': stroke.get('emphasis', 0.7),
+                    'duration': 0.3,
+                    'type': 'arpeggio'
+                })
+        elif style == 'rock':
+            for stroke in pattern.get('strokes', []):
+                for i, pc in enumerate(chord_notes[:3]):
+                    accompaniment.append({
+                        'measure': measure_idx,
+                        'time': measure_start + stroke['time'],
+                        'pitch_class': pc,
+                        'pitch': NOTE_NAMES[pc],
+                        'velocity': stroke.get('emphasis', 0.8) * (0.9 if i > 0 else 1.0),
+                        'duration': 0.4,
+                        'type': 'power_chord'
+                    })
+        else:
+            for stroke in pattern.get('strokes', []):
+                for i, pc in enumerate(chord_notes):
+                    accompaniment.append({
+                        'measure': measure_idx,
+                        'time': measure_start + stroke['time'],
+                        'pitch_class': pc,
+                        'pitch': NOTE_NAMES[pc],
+                        'velocity': stroke.get('emphasis', 0.7),
+                        'duration': 0.35,
+                        'type': 'strum'
+                    })
+
+    return accompaniment
+
+
+def match_chords(notes_list, style='folk', model_path=None):
+    notes = parse_notes(notes_list)
 
     if not notes:
-        return json.dumps({'chords': [], 'key': 'C', 'key_type': 'major'})
+        return {
+            'chords': [],
+            'key': 'C',
+            'key_type': 'major',
+            'style': style,
+            'style_info': STYLE_CONFIGS.get(style, STYLE_CONFIGS['folk']),
+            'rhythm_pattern': {},
+            'accompaniment': [],
+            'num_measures': 0,
+            'confidence': 0.0
+        }
 
     key_note, key_score, key_type = determine_key(notes)
     diatonic_chords = get_diatonic_chords(key_note, key_type)
@@ -265,7 +493,7 @@ def match_chords(notes_json, model_path=None):
     for measure in measures:
         note_dist = measure_note_distribution(measure)
 
-        candidates = diatonic_chords + [c for c in generate_candidate_chords() if c not in diatonic_chords]
+        candidates = generate_candidate_chords(style)
         candidates = list(set(candidates))
 
         scores = {}
@@ -273,15 +501,19 @@ def match_chords(notes_json, model_path=None):
             match_score = chord_note_match_score(chord, note_dist)
             root_score = root_note_score(chord, note_dist)
             prog_score = chord_progression_score(prev_chord, chord)
-
             diatonic_bonus = 0.15 if chord in diatonic_chords else 0.0
+            style_bonus = style_chord_bonus(chord, style)
 
-            total_score = match_score * 0.4 + root_score * 0.2 + prog_score * 0.25 + diatonic_bonus
+            total_score = (match_score * 0.4 +
+                           root_score * 0.2 +
+                           prog_score * 0.25 +
+                           diatonic_bonus +
+                           style_bonus)
 
             if model_loaded:
                 prev_idx = -1
                 if prev_chord and prev_chord in NOTE_NAMES:
-                    prev_idx = note_to_pitch_class(prev_chord)
+                    prev_idx = note_to_pitch_class(prev_chord[0])
                 input_vec = build_input_vector(note_dist, prev_idx)
                 nn_output = model.forward(input_vec)
                 chord_idx = note_to_pitch_class(chord[0])
@@ -294,15 +526,25 @@ def match_chords(notes_json, model_path=None):
         result_chords.append(best_chord)
         prev_chord = best_chord
 
+    style_config = STYLE_CONFIGS.get(style, STYLE_CONFIGS['folk'])
+    rhythm_type = style_config['rhythm_type']
+    rhythm_pattern = RHYTHM_PATTERNS.get(style, {}).get(rhythm_type, {})
+
+    accompaniment = generate_accompaniment_track(result_chords, style)
+
     result = {
         'chords': result_chords,
         'key': key_note,
         'key_type': key_type,
+        'style': style,
+        'style_info': style_config,
+        'rhythm_pattern': rhythm_pattern,
+        'accompaniment': accompaniment,
         'num_measures': len(measures),
         'confidence': float(key_score)
     }
 
-    return json.dumps(result)
+    return result
 
 
 def _read_input():
@@ -325,8 +567,13 @@ if __name__ == '__main__':
         sys.exit(1)
 
     try:
-        result = match_chords(input_data)
-        sys.stdout.write(result)
+        notes_list, style = parse_input(input_data)
+        if style not in STYLE_CONFIGS:
+            style = 'folk'
+
+        result = match_chords(notes_list, style)
+        output = json.dumps(result, ensure_ascii=False)
+        sys.stdout.write(output)
         sys.stdout.write('\n')
         sys.stdout.flush()
         sys.exit(0)

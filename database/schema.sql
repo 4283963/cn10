@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS chord_matches (
     chords_json TEXT NOT NULL,
     musical_key VARCHAR(10),
     key_type VARCHAR(20),
+    style VARCHAR(20),
     num_measures INTEGER DEFAULT 0,
     confidence DOUBLE PRECISION DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP

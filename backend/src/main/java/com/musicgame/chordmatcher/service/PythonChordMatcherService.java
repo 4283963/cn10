@@ -1,5 +1,7 @@
 package com.musicgame.chordmatcher.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.musicgame.chordmatcher.config.ChordMatcherConfig;
@@ -15,6 +17,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.*;
 
 @Service
@@ -51,7 +54,11 @@ public class PythonChordMatcherService {
     }
 
     public ChordMatchResult matchChords(List<NoteDto> notes) throws IOException, InterruptedException, TimeoutException {
-        String notesJson = objectMapper.writeValueAsString(notes);
+        return matchChords(notes, "folk");
+    }
+
+    public ChordMatchResult matchChords(List<NoteDto> notes, String style) throws IOException, InterruptedException, TimeoutException {
+        String inputJson = buildInputJson(notes, style);
 
         if (!processSemaphore.tryAcquire(PROCESS_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
             throw new TimeoutException("Too many chord matching requests. Please try again later.");
@@ -59,7 +66,7 @@ public class PythonChordMatcherService {
 
         Process process = null;
         try {
-            process = startProcess(notesJson);
+            process = startProcess(inputJson);
             return collectResult(process);
         } finally {
             cleanupProcess(process);
@@ -67,7 +74,14 @@ public class PythonChordMatcherService {
         }
     }
 
-    private Process startProcess(String notesJson) throws IOException {
+    private String buildInputJson(List<NoteDto> notes, String style) throws JsonProcessingException {
+        Map<String, Object> input = new java.util.HashMap<>();
+        input.put("notes", notes);
+        input.put("style", style != null ? style : "folk");
+        return objectMapper.writeValueAsString(input);
+    }
+
+    private Process startProcess(String inputJson) throws IOException {
         ProcessBuilder processBuilder = new ProcessBuilder(
                 config.getPythonPath(),
                 scriptAbsolutePath.toString()
@@ -77,7 +91,7 @@ public class PythonChordMatcherService {
         Process process = processBuilder.start();
 
         try (OutputStream stdin = process.getOutputStream()) {
-            stdin.write(notesJson.getBytes(StandardCharsets.UTF_8));
+            stdin.write(inputJson.getBytes(StandardCharsets.UTF_8));
             stdin.flush();
         }
 
@@ -198,6 +212,21 @@ public class PythonChordMatcherService {
         if (root.has("confidence")) {
             result.setConfidence(root.get("confidence").asDouble());
         }
+        if (root.has("style")) {
+            result.setStyle(root.get("style").asText());
+        }
+        if (root.has("style_info")) {
+            result.setStyleInfo(objectMapper.convertValue(root.get("style_info"),
+                    new TypeReference<Map<String, Object>>() {}));
+        }
+        if (root.has("rhythm_pattern")) {
+            result.setRhythmPattern(objectMapper.convertValue(root.get("rhythm_pattern"),
+                    new TypeReference<Map<String, Object>>() {}));
+        }
+        if (root.has("accompaniment")) {
+            result.setAccompaniment(objectMapper.convertValue(root.get("accompaniment"),
+                    new TypeReference<List<Map<String, Object>>>() {}));
+        }
 
         return result;
     }
@@ -208,6 +237,10 @@ public class PythonChordMatcherService {
         private String keyType;
         private int numMeasures;
         private double confidence;
+        private String style;
+        private Map<String, Object> styleInfo;
+        private Map<String, Object> rhythmPattern;
+        private List<Map<String, Object>> accompaniment;
 
         public List<String> getChords() {
             return chords;
@@ -247,6 +280,38 @@ public class PythonChordMatcherService {
 
         public void setConfidence(double confidence) {
             this.confidence = confidence;
+        }
+
+        public String getStyle() {
+            return style;
+        }
+
+        public void setStyle(String style) {
+            this.style = style;
+        }
+
+        public Map<String, Object> getStyleInfo() {
+            return styleInfo;
+        }
+
+        public void setStyleInfo(Map<String, Object> styleInfo) {
+            this.styleInfo = styleInfo;
+        }
+
+        public Map<String, Object> getRhythmPattern() {
+            return rhythmPattern;
+        }
+
+        public void setRhythmPattern(Map<String, Object> rhythmPattern) {
+            this.rhythmPattern = rhythmPattern;
+        }
+
+        public List<Map<String, Object>> getAccompaniment() {
+            return accompaniment;
+        }
+
+        public void setAccompaniment(List<Map<String, Object>> accompaniment) {
+            this.accompaniment = accompaniment;
         }
     }
 }
