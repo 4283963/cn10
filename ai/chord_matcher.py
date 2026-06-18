@@ -2,6 +2,7 @@ import numpy as np
 import json
 import sys
 import os
+import signal
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from model.chord_nn import ChordNeuralNetwork
@@ -44,6 +45,14 @@ CHORD_PROGRESSION_SCORES = {
     ('Dm', 'G'): 0.9, ('Dm', 'Am'): 0.8,
     ('Em', 'Am'): 0.9, ('Em', 'C'): 0.7,
 }
+
+
+def _signal_handler(signum, frame):
+    sys.exit(128 + signum)
+
+
+signal.signal(signal.SIGTERM, _signal_handler)
+signal.signal(signal.SIGINT, _signal_handler)
 
 
 def note_to_pitch_class(note_name):
@@ -296,16 +305,37 @@ def match_chords(notes_json, model_path=None):
     return json.dumps(result)
 
 
-if __name__ == '__main__':
-    if len(sys.argv) < 2:
-        print(json.dumps({'error': 'No input provided'}))
-        sys.exit(1)
+def _read_input():
+    if not sys.stdin.isatty():
+        data = sys.stdin.read()
+        if data and data.strip():
+            return data.strip()
 
-    input_data = sys.argv[1]
+    if len(sys.argv) >= 2:
+        return sys.argv[1]
+
+    return None
+
+
+if __name__ == '__main__':
+    input_data = _read_input()
+
+    if input_data is None:
+        print(json.dumps({'error': 'No input provided. Pass notes JSON via stdin or command line argument.'}))
+        sys.exit(1)
 
     try:
         result = match_chords(input_data)
-        print(result)
+        sys.stdout.write(result)
+        sys.stdout.write('\n')
+        sys.stdout.flush()
+        sys.exit(0)
     except Exception as e:
-        print(json.dumps({'error': str(e)}))
+        try:
+            error_output = json.dumps({'error': str(e)})
+            sys.stderr.write(error_output)
+            sys.stderr.write('\n')
+            sys.stderr.flush()
+        except Exception:
+            pass
         sys.exit(1)

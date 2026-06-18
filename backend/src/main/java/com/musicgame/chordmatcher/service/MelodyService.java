@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 @Service
@@ -93,6 +94,13 @@ public class MelodyService {
                     matchResult.getKey(), matchResult.getKeyType());
             return saved;
 
+        } catch (TimeoutException e) {
+            logger.warn("Chord matching timed out for melody {}: {}", melody.getId(), e.getMessage());
+            throw new RuntimeException("Chord matching timed out. The server is busy, please try again later.", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.warn("Chord matching interrupted for melody {}", melody.getId());
+            throw new RuntimeException("Chord matching was interrupted.", e);
         } catch (Exception e) {
             logger.error("Failed to match chords for melody {}: {}", melody.getId(), e.getMessage(), e);
             throw new RuntimeException("Chord matching failed: " + e.getMessage(), e);

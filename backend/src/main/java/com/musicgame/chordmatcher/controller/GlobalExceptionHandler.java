@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeoutException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -31,12 +32,28 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(response);
     }
 
+    @ExceptionHandler(TimeoutException.class)
+    public ResponseEntity<Map<String, Object>> handleTimeoutException(TimeoutException ex) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("error", ex.getMessage());
+        response.put("status", HttpStatus.SERVICE_UNAVAILABLE.value());
+        response.put("retryable", true);
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(response);
+    }
+
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Map<String, Object>> handleRuntimeException(RuntimeException ex) {
         Map<String, Object> response = new HashMap<>();
-        response.put("error", ex.getMessage());
-        response.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        String message = ex.getMessage() != null ? ex.getMessage() : "Internal server error";
+        response.put("error", message);
+
+        HttpStatus status = HttpStatus.INTERNAL_SERVER_ERROR;
+        if (message.contains("timed out") || message.contains("busy") || message.contains("Too many")) {
+            status = HttpStatus.SERVICE_UNAVAILABLE;
+            response.put("retryable", true);
+        }
+        response.put("status", status.value());
+        return ResponseEntity.status(status).body(response);
     }
 
     @ExceptionHandler(Exception.class)
